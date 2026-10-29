@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우리도장 통합 관리 프로그램</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-3 sm:p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- 헤더 -->
+        <header class="bg-indigo-600 text-white rounded-2xl p-4 sm:p-6 shadow-lg mb-4 sm:mb-6 flex flex-col gap-3">
+            <div>
+                <h1 class="text-xl sm:text-3xl font-bold">🥋 도장 원생 통합 관리</h1>
+                <p class="text-indigo-100 text-xs sm:text-sm mt-1">부서별 인원 확인 &amp; 실시간 결제/출석 관리</p>
+            </div>
+            <div class="flex gap-2 w-full">
+                <button onclick="openSettingsModal()" class="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold shadow transition text-center">
+                    ⚙️ 연동 설정
+                </button>
+                <button onclick="openAllModal()" class="flex-1 bg-indigo-700 hover:bg-indigo-800 text-white py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold shadow transition text-center">
+                    📋 전체 명부
+                </button>
+            </div>
+        </header>
+
+        <!-- 알림 상단 배너 -->
+        <div id="alertBanner" class="hidden bg-red-50 border-l-4 border-red-500 p-3 sm:p-4 rounded-xl shadow mb-4 sm:mb-6 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-xl sm:text-2xl">🚨</span>
+                <div>
+                    <h3 class="font-bold text-red-800 text-xs sm:text-sm">결제일 임박/초과 알림</h3>
+                    <p id="alertBannerText" class="text-xs sm:text-sm text-red-700">확인이 필요한 원생이 있습니다.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 요약 카드 -->
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <div class="bg-white p-3 sm:p-4 rounded-xl shadow border border-slate-100 text-center sm:text-left">
+                <p class="text-xs text-slate-500">전체</p>
+                <p id="totalCount" class="text-lg sm:text-2xl font-bold text-slate-800">0명</p>
+            </div>
+            <div class="bg-white p-3 sm:p-4 rounded-xl shadow border border-slate-100 text-center sm:text-left">
+                <p class="text-xs text-slate-500">결제임박</p>
+                <p id="alertCount" class="text-lg sm:text-2xl font-bold text-red-600">0명</p>
+            </div>
+            <div class="bg-white p-3 sm:p-4 rounded-xl shadow border border-slate-100 text-center sm:text-left">
+                <p class="text-xs text-slate-500">오늘출석</p>
+                <p id="attendCount" class="text-lg sm:text-2xl font-bold text-emerald-600">0명</p>
+            </div>
+        </div>
+
+        <!-- 원생 등록 폼 -->
+        <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-lg mb-4 sm:mb-6 border border-slate-100">
+            <h2 id="formTitle" class="text-base sm:text-lg font-bold text-slate-800 mb-3">✨ 새 원생 등록하기</h2>
+            <form id="studentForm" class="flex flex-col gap-3">
+                <input type="hidden" id="editId">
+                <input type="text" id="name" placeholder="원생 이름" required class="w-full p-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="belt" placeholder="부 (예: 초등부, 중등부, 고등부, 성인부)" required class="w-full p-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="date" id="payDate" required class="w-full p-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <div class="flex gap-2">
+                    <button type="submit" id="submitBtn" class="flex-1 bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 transition">등록하기</button>
+                    <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-sm hover:bg-slate-300 transition">취소</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 부서별 필터 버튼 바 (인원수 실시간 표시) -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-none">
+            <button onclick="filterByDept('전체')" id="filter-전체" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-indigo-600 text-white shadow-sm transition">전체보기 (<span id="cnt-전체">0</span>)</button>
+            <button onclick="filterByDept('초등부')" id="filter-초등부" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">초등부 (<span id="cnt-초등부">0</span>)</button>
+            <button onclick="filterByDept('중등부')" id="filter-중등부" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">중등부 (<span id="cnt-중등부">0</span>)</button>
+            <button onclick="filterByDept('고등부')" id="filter-고등부" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">고등부 (<span id="cnt-고등부">0</span>)</button>
+            <button onclick="filterByDept('성인부')" id="filter-성인부" class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition">성인부 (<span id="cnt-성인부">0</span>)</button>
+        </div>
+
+        <!-- 메인 원생 목록 테이블 -->
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-100">
+            <div class="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 id="tableTitle" class="text-base sm:text-lg font-bold text-slate-800">📋 원생 명부 (전체보기)</h2>
+                <button onclick="clearData()" class="text-xs text-red-500 hover:underline">데이터 초기화</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[600px]">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 text-xs sm:text-sm">
+                            <th class="p-3 sm:p-4">이름</th>
+                            <th class="p-3 sm:p-4">소속 부</th>
+                            <th class="p-3 sm:p-4">다음 결제일</th>
+                            <th class="p-3 sm:p-4">결제 상태 알람</th>
+                            <th class="p-3 sm:p-4">오늘 출석</th>
+                            <th class="p-3 sm:p-4 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                        <!-- 동적 생성 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 전체 원생 보기 모달 팝업 -->
+    <div id="allModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                <h3 class="text-lg font-bold text-slate-800">📋 전체 원생 명부 보기</h3>
+                <button onclick="closeAllModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+            </div>
+            <div class="overflow-y-auto flex-1">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 text-xs">
+                            <th class="p-2 sm:p-3">이름</th>
+                            <th class="p-2 sm:p-3">소속 부</th>
+                            <th class="p-2 sm:p-3">결제일</th>
+                            <th class="p-2 sm:p-3">상태</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modalTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                        <!-- 동적 생성 -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3 pt-3 border-t text-right">
+                <button onclick="closeAllModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 연동 설정 모달 -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                <h3 class="text-lg font-bold text-slate-800">⚙️ 구글시트 연동 설정</h3>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-600 mb-3">
+                여러 기기에서 데이터를 공유하려면 구글 Apps Script 웹 앱 URL을 입력하세요.
+            </p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">구글 웹앱 URL</label>
+                    <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full p-3 border rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button onclick="closeSettingsModal()" class="px-3 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold">취소</button>
+                    <button onclick="saveApiUrl()" class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-700">저장</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apiUrl = localStorage.getItem('dojang_api_url') || '';
+        let students = JSON.parse(localStorage.getItem('dojang_students')) || [];
+        let currentFilter = '전체';
+
+        const form = document.getElementById('studentForm');
+        const tableBody = document.getElementById('studentTableBody');
+        const modalTableBody = document.getElementById('modalTableBody');
+        const totalCount = document.getElementById('totalCount');
+        const alertCount = document.getElementById('alertCount');
+        const attendCount = document.getElementById('attendCount');
+        const alertBanner = document.getElementById('alertBanner');
+        const alertBannerText = document.getElementById('alertBannerText');
+        const formTitle = document.getElementById('formTitle');
+        const submitBtn = document.getElementById('submitBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const editId = document.getElementById('editId');
+        const apiUrlInput = document.getElementById('apiUrlInput');
+        const tableTitle = document.getElementById('tableTitle');
+
+        function openSettingsModal() {
+            apiUrlInput.value = apiUrl;
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function saveApiUrl() {
+            apiUrl = apiUrlInput.value.trim();
+            localStorage.setItem('dojang_api_url', apiUrl);
+            alert('구글 시트 연동 주소가 저장되었습니다[cite: 1]!');
+            closeSettingsModal();
+            loadData();
+        }
+
+        async function loadData() {
+            if (apiUrl) {
+                try {
+                    const res = await fetch(apiUrl);
+                    const data = await res.json();
+                    students = data;
+                    localStorage.setItem('dojang_students', JSON.stringify(students));
+                } catch (e) {
+                    console.error("데이터 로드 실패, 로컬 데이터 사용", e);
+                }
+            }
+            render();
+        }
+
+        async function saveData() {
+            localStorage.setItem('dojang_students', JSON.stringify(students));
+            if (apiUrl) {
+                try {
+                    await fetch(apiUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(students)
+                    });
+                } catch (e) {
+                    console.error("서버 동기화 실패", e);
+                }
+            }
+            render();
+        }
+
+        function filterByDept(dept) {
+            currentFilter = dept;
+            ['전체', '초등부', '중등부', '고등부', '성인부'].forEach(d => {
+                const btn = document.getElementById(`filter-${d}`);
+                if (d === dept) {
+                    btn.className = "px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-indigo-600 text-white shadow-sm transition";
+                } else {
+                    btn.className = "px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 transition";
+                }
+            });
+            tableTitle.innerText = `📋 원생 명부 (${dept} 보기)`;
+            render();
+        }
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const belt = document.getElementById('belt').value.trim();
+            const payDate = document.getElementById('payDate').value;
+            const currentEditId = editId.value;
+
+            if (currentEditId) {
+                const student = students.find(s => s.id == currentEditId);
+                if (student) {
+                    student.name = name;
+                    student.belt = belt;
+                    student.payDate = payDate;
+                }
+            } else {
+                students.push({
+                    id: Date.now(),
+                    name,
+                    belt,
+                    payDate,
+                    attended: false
+                });
+            }
+
+            saveData();
+            resetForm();
+        });
+
+        function resetForm() {
+            form.reset();
+            editId.value = '';
+            formTitle.innerText = "✨ 새 원생 등록하기";
+            submitBtn.innerText = "등록하기";
+            cancelBtn.classList.add('hidden');
+        }
+
+        function editStudent(id) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                editId.value = student.id;
+                document.getElementById('name').value = student.name;
+                document.getElementById('belt').value = student.belt;
+                document.getElementById('payDate').value = student.payDate;
+                formTitle.innerText = "✏️ 원생 정보 수정하기";
+                submitBtn.innerText = "수정 완료";
+                cancelBtn.classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function deleteStudent(id) {
+            if (confirm('정말 삭제하시겠습니까?')) {
+                students = students.filter(s => s.id !== id);
+                saveData();
+            }
+        }
+
+        function toggleAttend(id) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                student.attended = !student.attended;
+                saveData();
+            }
+        }
+
+        function completePayment(id) {
+            const student = students.find(s => s.id === id);
+            if (student) {
+                let d = new Date(student.payDate);
+                d.setMonth(d.getMonth() + 1);
+                
+                let year = d.getFullYear();
+                let month = String(d.getMonth() + 1).padStart(2, '0');
+                let day = String(d.getDate()).padStart(2, '0');
+                
+                student.payDate = `${year}-${month}-${day}`;
+                saveData();
+                alert(`${student.name} 원생의 결제일이 다음 달(${student.payDate})로 갱신되었습니다!`);
+            }
+        }
+
+        function clearData() {
+            if (confirm('모든 데이터를 초기화하시겠습니까?')) {
+                students = [];
+                saveData();
+            }
+        }
+
+        function openAllModal() {
+            document.getElementById('allModal').classList.remove('hidden');
+            renderModal();
+        }
+
+        function closeAllModal() {
+            document.getElementById('allModal').classList.add('hidden');
+        }
+
+        function renderModal() {
+            modalTableBody.innerHTML = '';
+            if (students.length === 0) {
+                modalTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">등록된 원생이 없습니다.</td></tr>`;
+                return;
+            }
+            let sortedStudents = [...students].sort((a, b) => getDeptOrder(a.belt) - getDeptOrder(b.belt));
+            sortedStudents.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50";
+                tr.innerHTML = `
+                    <td class="p-2 sm:p-3 font-semibold text-slate-800">${s.name}</td>
+                    <td class="p-2 sm:p-3 text-slate-600"><span class="px-2 py-0.5 bg-slate-100 font-medium rounded text-xs">${s.belt}</span></td>
+                    <td class="p-2 sm:p-3 text-slate-600">${s.payDate}</td>
+                    <td class="p-2 sm:p-3"><span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] sm:text-xs">등록됨</span></td>
+                `;
+                modalTableBody.appendChild(tr);
+            });
+        }
+
+        function getDeptOrder(dept) {
+            if (dept.includes('초등')) return 1;
+            if (dept.includes('중등')) return 2;
+            if (dept.includes('고등')) return 3;
+            if (dept.includes('성인')) return 4;
+            return 5;
+        }
+
+        function render() {
+            tableBody.innerHTML = '';
+            let alerts = 0;
+            let attends = 0;
+            let alertNames = [];
+            const today = new Date();
+            today.setHours(0,0,0,0);
+
+            // 각 부서별 인원 카운트 계산
+            let countAll = students.length;
+            let countCho = students.filter(s => s.belt.includes('초등부')).length;
+            let countJung = students.filter(s => s.belt.includes('중등부')).length;
+            let countGo = students.filter(s => s.belt.includes('고등부')).length;
+            let countSung = students.filter(s => s.belt.includes('성인부')).length;
+
+            document.getElementById('cnt-전체').innerText = countAll;
+            document.getElementById('cnt-초등부').innerText = countCho;
+            document.getElementById('cnt-중등부').innerText = countJung;
+            document.getElementById('cnt-고등부').innerText = countGo;
+            document.getElementById('cnt-성인부').innerText = countSung;
+
+            if (students.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 원생이 없습니다. 위에서 등록해 주세요.</td></tr>`;
+                totalCount.innerText = "0명";
+                alertCount.innerText = "0명";
+                attendCount.innerText = "0명";
+                alertBanner.classList.add('hidden');
+                return;
+            }
+
+            let filteredStudents = currentFilter === '전체' 
+                ? students 
+                : students.filter(s => s.belt.includes(currentFilter));
+
+            filteredStudents.sort((a, b) => {
+                let orderA = getDeptOrder(a.belt);
+                let orderB = getDeptOrder(b.belt);
+                if (orderA !== orderB) return orderA - orderB;
+                return a.name.localeCompare(b.name);
+            });
+
+            if (filteredStudents.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">${currentFilter}에 등록된 원생이 없습니다.</td></tr>`;
+            }
+
+            filteredStudents.forEach(s => {
+                if (s.attended) attends++;
+
+                const pDate = new Date(s.payDate);
+                pDate.setHours(0,0,0,0);
+                const diffDays = Math.ceil((pDate - today) / (1000 * 60 * 60 * 24));
+
+                let badgeHtml = '';
+                if (diffDays < 0) {
+                    badgeHtml = `<span class="px-2 py-1 bg-red-100 text-red-700 rounded-full font-semibold text-[11px]">초과 (${Math.abs(diffDays)}일)</span>`;
+                    alerts++;
+                    alertNames.push(`${s.name}(초과)`);
+                } else if (diffDays <= 2) {
+                    badgeHtml = `<span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full font-semibold text-[11px] animate-pulse">🔥 ${diffDays === 0 ? '당일!' : diffDays + '일 전'}</span>`;
+                    alerts++;
+                    alertNames.push(`${s.name}(D-${diffDays})`);
+                } else {
+                    badgeHtml = `<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[11px]">안정 (D-${diffDays})</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-3 sm:p-4 font-semibold text-slate-800">${s.name}</td>
+                    <td class="p-3 sm:p-4 text-slate-600">
+                        <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-lg text-xs">${s.belt}</span>
+                    </td>
+                    <td class="p-3 sm:p-4 text-slate-600 font-medium">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-1">
+                            <span>${s.payDate}</span>
+                            <button onclick="completePayment(${s.id})" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] border border-indigo-200 whitespace-nowrap">결제연장</button>
+                        </div>
+                    </td>
+                    <td class="p-3 sm:p-4">${badgeHtml}</td>
+                    <td class="p-3 sm:p-4">
+                        <button onclick="toggleAttend(${s.id})" class="px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap ${s.attended ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}">
+                            ${s.attended ? '출석 완료 ✓' : '미체크'}
+                        </button>
+                    </td>
+                    <td class="p-3 sm:p-4 text-center whitespace-nowrap space-x-1">
+                        <button onclick="editStudent(${s.id})" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium px-1">수정</button>
+                        <button onclick="deleteStudent(${s.id})" class="text-red-500 hover:text-red-700 text-xs font-medium px-1">삭제</button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            totalCount.innerText = students.length + "명";
+            alertCount.innerText = alerts + "명";
+            attendCount.innerText = attends + "명";
+
+            if (alerts > 0) {
+                alertBanner.classList.remove('hidden');
+                alertBannerText.innerText = `결제 임박/초과: ${alertNames.join(', ')}`;
+            } else {
+                alertBanner.classList.add('hidden');
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
